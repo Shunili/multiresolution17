@@ -22,7 +22,7 @@
 
 %% Operators
 \newcommand{\R}{\mathbb{R}}
-\lstset{ %
+\lstset{
 language=Matlab,                % choose the language of the code
 basicstyle=\footnotesize,       % the size of the fonts that are used for the code
 numbers=left,                   % where to put the line-numbers
@@ -221,7 +221,7 @@ Scaling Function \qquad\qquad\qquad Wavelet Scale 1 \qquad\qquad\qquad Wavelet S
 
 \includegraphics[width=4.84cm,keepaspectratio]{sensor_network/scaling_frequency} \includegraphics[width=4.85cm,keepaspectratio]{sensor_network/wavelet_scale_1_frequency} \includegraphics[width=4.85cm,keepaspectratio]{sensor_network/wavelet_scale_2_frequency}
 
-\caption{\label{fig:sensor network} Dictionary Atoms in both vertex and frequency domain.}
+\caption{\label{fig:sensor net} Dictionary Atoms in both vertex and frequency domain.}
 \end{figure}
 
 
@@ -595,7 +595,7 @@ Double Procrustes problem considers finding an orthogonal matrix $Q$, which mini
 
 Since both $A$ and $B$ are symmetric, we can diagonalize these two matrices
 $$ A = V_1D_1V_2^T\text{ and } B = V_2D_2V_2^T.$$
-Then in this case, $Q = V_1 V_2^T$. (Detailed solution can be found in ``Procrustes Problems'', Oxford University Press). 
+Then in this case, $Q = V_1 V_2^T$. (Detailed solution can be found in "Procrustes Problems", Oxford University Press). 
 
 In the graph setting, we want to find an orthogonal $Q$, which minimizes $||Q^TLQ - L'||$, where $L$ is the original graph Laplacian and $L'$ is the reduced graph Laplacian. If we do multile levels, we could generate scaling and wavelet functions similar to pMMF. That is, the first $dim(V_L)$ rows of $Q$ are scaling functions and the rest of its rows are wavelets.
 
@@ -607,12 +607,33 @@ Some general observations;
 \item Kron reduction produced dense sub-graphs.
 \end{enumerate}
 
- 
-%%%changed sth here!!!!!
+\section{Downsampling G.W}
 
-
-
-
-
+The structure of the weighted adjacency matrix can be lost through downsampling -- we are often left with a core that has non-zero diagonal entries. We can maintain a zero diagonal, however, by being selective when we rotate columns within a certain cluster. If columns $i$ and $j$ only rotate with one another, and if $[A_{n-1}]_{i,i} = 0$, then $$[A_n]_{i,i} = [Q_nA_{n-1}Q_n^T]_{i,i} = 0$$ if vertices $i$ and $j$ are disconnected in the graph represented by the weighted adjacency matrix $A_{n-1}$:
+\begin{align*}
+[A_n]_{i,i} &= [Q_nA_{n-1}Q_n^T]_{i,i} \\
+&= [Q_n]_{i,:}[A_{n-1}Q_n^T]_{:,i} \\
+&= [Q_n]_{i,:}<[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [A_{n-1}]_{s,:}[Q_n^T]_{:,i}> \\
+&= [Q_n]_{i,1}[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [Q_n]_{i,s}[A_{n-1}]_{s,:}[Q_n^T]_{:,i} 
+\end{align*}
+Since column $i$ only rotates with column $j$, the $i^{th}$ row of $Q_n$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ columns. So, the above equation simplifies to
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}[A_{n-1}]_{i,:}[Q_n^T]_{:,i} + [Q_n]_{i,j}[A_{n-1}]_{j,:}[Q_n^T]_{:,i}
+\end{align*}
+Likewise, the $i^{th}$ column of $Q_n^T$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ rows. We now have
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}) \\
+&= [Q_n]_{i,i}(0 + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + 0)
+\end{align*} 
+We have $[A_{n-1}]_{i,j} = [A_{n-1}]_{j,i}$ since $A$ is symmetric and $[Q_n]_{i,j} = [Q_n^T]_{j,i}$, so we are left with $$[A_n]_{i,i} = 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j}$$
+Since both entries of $Q_n$ are nonzero, $[A_n]_{i,i} = $ if and only if $[A_{n-1}]_{i,j} = 0$. \\
+\\
+The case is complicated further when, say, column $i$ rotates with both column $j$ and column $k$. Then, $Q_n$ has nonzero entries in the $i^{th}$, $j^{th}$, and $k^{th}$ columns, so we would end up with
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i} + [A_{n-1}]_{i,k}[Q_n^T]_{k,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}  \\
+&+ [A_{n-1}]_{j,k}[Q_n^T]_{k,i}) + [Q_n]_{i,k}([A_{n-1}]_{k,i}[Q_n^T]_{i,i} + [A_{n-1}]_{k,j}[Q_n^T]_{j,i} + [A_{n-1}]_{k,k}[Q_n^T]_{k,i}) \\
+&= 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j} + 2[A_{n-1}]_{i,k}[Q_n]_{i,i}[Q_n]_{i,k} + 2[A_{n-1}]_{j,k}[Q_n]_{i,j}[Q_n]_{i,k}
+\end{align*}
+We see that $[A_{n-1}]_{j,k}$ now contributes as well. So, not only must the pairs $(i,j)$ and $(i,k)$ be disconnected, vertices $j$ and $k$ must also be disconnected even if they are not one of the pairs of columns that is rotated.
 
 \end{document}
