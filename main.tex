@@ -174,6 +174,8 @@ The scaling and  wavelet functions have the following properties:
 \item Last vertices remaining are the centers of the scaling functions in $V_L$.
 \item span($V_i$) = span($V_{i+1} \oplus W_{i+1}$)
 \end{enumerate}
+\smallskip
+In our code, $P_n$ is split into two separate permutations -- $C_n$, which occurs when the rows and columns are clustered, and $A_n$, which occurs when we group the remaining active columns together. However, for a given $\overline{A}_n$, the grouping of active columns and the clustering take place in successive iterations of a loop. For each $\overline{Q}_n$, we must undo the permutations $C_{n+1}$ and $A_n$. The only exception is $n = 1$ -- in this case, we only undo $C_1$ since the active columns have not yet been grouped together. So, our dictionary ($W$) is $$W = A_n\overline{Q}_nC_nA_{n-1}\cdots\overline{Q}_2C_2A_1\overline{Q}_1C_1$$
 
 \subsubsection{Example 1: $16 \times 16$ Community Graph}
 
@@ -298,26 +300,6 @@ The downsampled vertices greatly influence how the reduced graph is rewired. It 
 With a evenly downsampled graph (every other vertex is kept), can we get better results?  Maybe experiment with different clustering method to get a evenly downsampled graph?
 
 Note: If we perform MMF on the Laplacian matrix, the reduced matrix we get is not a valid graph Laplacian.
-
-\subsection{Clustering}
-
-\begin{itemize}
-\item Although clustering was only implemented to speed up the algorithm, it seems like larger numbers of clusters lead to more disconnected graphs.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 6 cm]{clusters/original_sensor}
-\includegraphics[width = 6 cm]{clusters/sensor_5_clusters}
-\includegraphics[width = 6 cm]{clusters/sensor_20_clusters}
-
-\caption{1. Original graph (gsp\_david \_sensor\_network) with 500 vertices. 2. Downsampled graph using 5 clusters. 3. Downsampled graph using 20 clusters.}
-\end{figure}
-
-\item This seems to a relatively consistent pattern, but not a necessary one (i.e. sometimes a downsampled graph using 2 clusters has 3 components while a downsampled graph using 5 clusters will have 2). 
-
-\item Also along these lines - the gsp\_check\_connectivity\_undirected function doesn't seem to work correctly (at least as it's described in the documentation), it said that connected graphs were unconnected pretty frequently.
-
-\end{itemize}
 
 \subsection{$A = L$ vs. $A = I - L$}
 \begin{itemize}
@@ -448,7 +430,7 @@ Let $x$ be the smallest eigenvector $v_1$ of $G_{I,I}$. Then,
 $$\text{min } x^T[G_{I,I}]x = \text{min } v_1^T[G_{I,I}]v_1 = v_1\lambda_1v_1 = \lambda_1$$
 
 
-To find $k$ rows/clumns involved in each rotation, pMMF uses the randomized greedy method. First, randomly select a column $i$, and then compute the inner product of this column with all other columns. The selected column set will include $k-1$ columns that have the largest inner products with column $i$. Algorithm 2 in ``Parallel MMF: a Multiresolution Approach to Matrix Computation'' gives a good description of this process.
+To find $k$ rows/columns involved in each rotation, pMMF uses the randomized greedy method. First, randomly select a column $i$, and then compute the inner product of this column with all other columns. The selected column set will include $k-1$ columns that have the largest inner products with column $i$. Algorithm 2 in ``Parallel MMF: a Multiresolution Approach to Matrix Computation'' gives a good description of this process.
 
 Note that after we get the rotation matrix $Q$, we have to update the original matrix $A= QAQ^T$ and the Gram matrix $G = QGQ^T$ before next channel.
 
@@ -634,9 +616,20 @@ The case is complicated further when, say, column $i$ rotates with both column $
 &+ [A_{n-1}]_{j,k}[Q_n^T]_{k,i}) + [Q_n]_{i,k}([A_{n-1}]_{k,i}[Q_n^T]_{i,i} + [A_{n-1}]_{k,j}[Q_n^T]_{j,i} + [A_{n-1}]_{k,k}[Q_n^T]_{k,i}) \\
 &= 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j} + 2[A_{n-1}]_{i,k}[Q_n]_{i,i}[Q_n]_{i,k} + 2[A_{n-1}]_{j,k}[Q_n]_{i,j}[Q_n]_{i,k}
 \end{align*}
-We see that $[A_{n-1}]_{j,k}$ now contributes as well. So, not only must the pairs $(i,j)$ and $(i,k)$ be disconnected, vertices $j$ and $k$ must also be disconnected even if they are not one of the pairs of columns that is rotated.
+We see that $[A_{n-1}]_{j,k}$ now contributes as well. So, not only must the pairs $(i,j)$ and $(i,k)$ be disconnected, vertices $j$ and $k$ must also be disconnected even if they are not one of the pairs of columns that is rotated.\\
+If we want to guarantee $[A_n]_{i,i} = 0$ for all $i$ in the cluster, the vertices in the cluster must all be mutually disconnected. However, this seems counterintuitive, since we normally would want to rotate similar vertices with one another. This method does the exact opposite, and as a result, downsampling results in edges between communities that were previously disconnected.
 
-%% little change
-%% another one
+\begin{figure}[H]
+\centering
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_1}
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_2}
+
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_3}
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_4}
+
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_5}
+
+\caption{pMMF performed on a 500 vertex sensor network with 4 stages, 4 clusters, 2-point rotations, and compression ratio 0.5. Rotations are performed only on disconnected vertices.}
+\end{figure}
 
 \end{document}
