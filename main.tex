@@ -162,13 +162,13 @@ where $V_L$ denotes the scaling functions at level $L$ and each $W_i$ denotes th
 The scaling and  wavelet functions have the following properties:
 \begin{enumerate}
 \item Scaling functions and wavelets are orthonormal. That is, the dictionary is an orthonormal matrix.
-\item Scaling Wavelet functions are localized in both vertex and frequency domain.
+\item Scaling and wavelet functions are localized in both vertex and frequency domain.
 \item Wavelets centered at the very first nodes eliminated have highest frequencies - these are the wavelet functions which make up $W_1$.
 \item Last vertices remaining are the centers of the scaling functions in $V_L$.
 \item span($V_i$) = span($V_{i+1} \oplus W_{i+1}$)
 \end{enumerate}
 \smallskip
-In our code, $P_n$ is split into two separate permutations -- $C_n$, which occurs when the rows and columns are clustered, and $A_n$, which occurs when we group the remaining active columns together. However, for a given $\overline{A}_n$, the grouping of active columns and the clustering take place in successive iterations of a loop. For each $\overline{Q}_n$, we must undo the permutations $C_{n+1}$ and $A_n$. The only exception is $n = 1$ -- in this case, we only undo $C_1$ since the active columns have not yet been grouped together. So, our dictionary ($W$) is $$W = A_n\overline{Q}_nC_nA_{n-1}\cdots\overline{Q}_2C_2A_1\overline{Q}_1C_1$$
+In our code, $P_n$ is split into two separate permutations -- $C_n$, which occurs when the rows and columns are clustered, and $A_n$, which occurs when we group the remaining active columns together. However, for a given $\overline{A}_n$, the grouping of active columns and the clustering take place in successive iterations of a loop. So, for each $\overline{Q}_n$, we must undo the permutations $C_{n+1}$ and $A_n$. The only exception is $n = 1$ -- in this case, we only undo $C_1$ since the active columns have not yet been grouped together. So, our dictionary ($W$) is $$W = A_n\overline{Q}_nC_nA_{n-1}\cdots\overline{Q}_2C_2A_1\overline{Q}_1C_1$$
 
 \subsubsection{Example 1: $16 \times 16$ Community Graph}
 
@@ -366,6 +366,71 @@ The adjacency matrix of the reduced graph is obtained from $H-Diag(H)$. Then we 
 
 \end{figure}
 
+\subsection{Interpolation Coefficient Matrix}
+Take A as the the weighted adjacency matrix, we notice that the reduced matrix has non-zero diagonals. In this section, we zero out the diagonals at each stage. Also, we set the compression ratio $\mu = 0.2$. Smaller compression ratio seems to give better interpolation results.
+
+First example is on the path graph. Parameters:
+\begin{enumerate}
+\item 128 vertices
+\item compression ratio $\mu = 0.2$
+\item 4 stages
+\item 2 cluster
+\end{enumerate}
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 7 cm]{0629/coefficients_path_graph_4_stages}
+\includegraphics[width = 7 cm]{0629/coefficients_path_graph_4_stages_threshold}
+
+\includegraphics[width = 7cm]{0629/path_graph_4_stages_7th_eigenvec}
+\includegraphics[width = 7 cm]{0629/path_graph_4_stages_7th_eigenvec_interpolated}
+\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
+{(c) original 7th eigenvector (d) interpolated 7th eigenvector}
+\end{figure}
+
+The following images are produced under same process except the diagonals of Abars are kept non-zero at each stage.
+\begin{figure}[H]
+\centering
+\includegraphics[width = 7 cm]{0629/original/coefficients_path_graph_4_stages}
+\includegraphics[width = 7 cm]{0629/original/coefficients_path_graph_4_stages_threshold}
+
+\includegraphics[width = 7cm]{0629/original/7th_eigen}
+\includegraphics[width = 7 cm]{0629/original/7th_eigen_interpolated}
+\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
+{(c) original 7th eigenvector (d) interpolated 7th eigenvector}
+\end{figure}
+
+
+
+The second example is on david\_sensor\_network graph. Parameters:
+\begin{enumerate}
+\item 500 vertices
+\item compression ratio $\mu = 0.2$
+\item 4 stages
+\item 2 cluster
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 12 cm]{0629/graph}
+
+\includegraphics[width = 12 cm]{0629/1st_downsampled}
+
+\includegraphics[width = 12cm]{0629/2nd_downsampled}
+\caption{ (a) original graph (b) 1st reduced graph (c) 2nd reduced graph}
+\end{figure}
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 12 cm]{0629/coefficients_zero_diagonal_4_stages}
+
+\includegraphics[width = 12 cm]{0629/coefficients_zero_diagonal_4_stages_threshold}
+
+\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
+\end{figure}
+
 \newpage
 \section{pMMF Multiresolution}
 \subsection{pMMF Detailed Pseudocode}
@@ -497,72 +562,6 @@ Parameters:
 \includegraphics[width = 7cm]{multiresolution/multires5}
 
 \caption{The top left figure is the original graph, gsp\_david\_sensor\_network with 500 vertices, and each subsequent figure is the result of one stage of downsampling.}
-\end{figure}
-
-
-\section{June 29}
-Take A as the the weighted adjacency matrix, we notice that the reduced matrix has non-zero diagonals. In this section, we zero out the diagonals at each stage. Also, we set the compression ratio $\mu = 0.2$. Smaller compression ratio seems to give better interpolation results.
-
-First example is on the path graph. Parameters:
-\begin{enumerate}
-\item 128 vertices
-\item compression ratio $\mu = 0.2$
-\item 4 stages
-\item 2 cluster
-\end{enumerate}
-
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 7 cm]{0629/coefficients_path_graph_4_stages}
-\includegraphics[width = 7 cm]{0629/coefficients_path_graph_4_stages_threshold}
-
-\includegraphics[width = 7cm]{0629/path_graph_4_stages_7th_eigenvec}
-\includegraphics[width = 7 cm]{0629/path_graph_4_stages_7th_eigenvec_interpolated}
-\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
-{(c) original 7th eigenvector (d) interpolated 7th eigenvector}
-\end{figure}
-
-The following images are produced under same process except the diagonals of Abars are kept non-zero at each stage.
-\begin{figure}[H]
-\centering
-\includegraphics[width = 7 cm]{0629/original/coefficients_path_graph_4_stages}
-\includegraphics[width = 7 cm]{0629/original/coefficients_path_graph_4_stages_threshold}
-
-\includegraphics[width = 7cm]{0629/original/7th_eigen}
-\includegraphics[width = 7 cm]{0629/original/7th_eigen_interpolated}
-\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
-{(c) original 7th eigenvector (d) interpolated 7th eigenvector}
-\end{figure}
-
-
-
-The second example is on david\_sensor\_network graph. Parameters:
-\begin{enumerate}
-\item 500 vertices
-\item compression ratio $\mu = 0.2$
-\item 4 stages
-\item 2 cluster
-\end{enumerate}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 12 cm]{0629/graph}
-
-\includegraphics[width = 12 cm]{0629/1st_downsampled}
-
-\includegraphics[width = 12cm]{0629/2nd_downsampled}
-\caption{ (a) original graph (b) 1st reduced graph (c) 2nd reduced graph}
-\end{figure}
-
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 12 cm]{0629/coefficients_zero_diagonal_4_stages}
-
-\includegraphics[width = 12 cm]{0629/coefficients_zero_diagonal_4_stages_threshold}
-
-\caption{ (a) interpolation coefficient matrix (b) threshold at $x>10$ }
 \end{figure}
 
 \section{Double Procrustes Problem}
