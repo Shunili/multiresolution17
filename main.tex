@@ -97,7 +97,7 @@ If $n_1<n_2$, eliminate $i_1$. Otherwise, eliminate $i_2$.
 
 \end{enumerate}
 
-\subsection{other}
+\subsection{Other}
 \begin{enumerate}
 \item How to quantify the relationship between reduced and original Laplacian eigenvectors?
 \item How to construct a graph from a given heat diffusion? (convex optimization, see \cite{Segarra})
@@ -184,20 +184,126 @@ Each orthogonal transform eliminates a small set of vertices by introducing zero
 
 Each $V_i$ is a subspace spanned by scaling functions at level $i$, which provide global insight into structure of signals, while each $W_i$ is a subspace spanned by wavelet functions at level $i$, which have higher frequency than scaling functions and capture specialized local information of signals.
 
-In general, pMMF is only an approximation algorithm. Essentialy, it tries to solve this optimization problem
+
+Essentialy, pMMF is an approcimation algorithm and it tries to solve the following optimization problem
 \[\underset{Q_1\cdots Q_l \in \mathcal{Q}}{\text{minimize }} ||A - Q_1^T\cdots Q_L^THQ_L\cdots Q_1||^2_{\Frob}\]
 
-\subsection{Algorithm}
+\subsection{pMMF Detailed Pseudocode}
+
+\begin{algorithm}[H]
+\caption{ComputeRotationMatrix}\label{givens}
+\begin{algorithmic}[1]
+\State \textbf{Input:} current cluster $A_1$, row/column indices $i$ and $j$, current Gram Matrix $G$
+
+\State \textbf{set} $b = G(i, j)$
+\State \textbf{set} $c = (G(j, j) - G(i, i))/2$;
+
+\If {$g\neq 0$}
+\State \textbf{set} $\beta = c / b$
+\State \textbf{set} $tan(\alpha) = \frac{1}{|\beta| + \sqrt{\beta * \beta + 1}}$
+
+\State \textbf{set}  $cos(\alpha) = \frac{1}{\sqrt{(t * t + 1)}}$;
+
+\State \textbf{set}   $Q = \begin{bmatrix}
+\cos(\alpha) & -\sin(\alpha) \\
+\sin(\alpha)  & \cos(\alpha)
+\end{bmatrix}$
+\Else
+
+$Q = I$
+\EndIf
+\State \textbf{Output:} $Q$
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm \ref{givens} finds an orthogonal rotation matrix $Q = \begin{bmatrix}
+\cos(\alpha) & -\sin(\alpha) \\
+\sin(\alpha)  & \cos(\alpha)
+\end{bmatrix}$
+ such that the second term of equation 20 is minimized when $k = 2$. That is to find an angle $\theta = 2\alpha$ such that $$\sin(\theta + \omega +\pi/2) = 0,, \text{where } \omega = \arctan(\frac{G(i,i) - G(j,j)}{2G(i,j)})$$
+ 
+ Let $b = G(i, j)$ and $c = \frac{G(j, j) - G(i, i)}{2}$;
+ 
+ Equivalently,
+ $$\cos(\theta + \omega) = 0$$
+ $$\theta = \pi/2-\omega = \pi/2 - \arctan(\frac{c}{b})$$
+ 
+$$\tan(\alpha) = \tan(\theta/2) = \tan(\pi/4 - \frac{1}{2}\arctan(\frac{c}{b})) \text{     (if }\frac{c}{b}>0)$$
+$$\tan(\alpha) = \frac{1}{\frac{c}{b} + \sqrt{(\frac{c}{b})^2 +1}}$$
+$$\cos(\alpha) = \frac{1}{\sqrt{\tan(\alpha)^2 + 1}}$$
+$$\sin(\alpha) = \tan(\alpha)*\sin(\alpha)$$
+
+When $k>2$, the rotation matrix $Q$ is the transpose of eigenvectors of the $G_{I,I}$, where $I$ contains $k$ selected column indices. (why?)
+
+The code appears to ignore the first error term as well. Similarly, only the second term of equation 20 is minimized. That is,
+$$\text{min } [QG_{I,I}Q^T]_{k,k}$$
+Equivalently, $$\text{min } x^T[G_{I,I}]x \text{ such that } ||x||_2 = 1.$$
+By Courant-Fischer theorem, $$\text{min } x^T[G_{I,I}]x = \lambda_1$$
+
+Let $x$ be the smallest eigenvector $v_1$ of $G_{I,I}$. Then,
+$$\text{min } x^T[G_{I,I}]x = \text{min } v_1^T[G_{I,I}]v_1 = v_1\lambda_1v_1 = \lambda_1$$
+
+
+To find $k$ rows/columns involved in each rotation, pMMF uses the randomized greedy method. First, randomly select a column $i$, and then compute the inner product of this column with all other columns. The selected column set will include $k-1$ columns that have the largest inner products with column $i$. Algorithm 2 in ``Parallel MMF: a Multiresolution Approach to Matrix Computation'' gives a good description of this process.
+
+Note that after we get the rotation matrix $Q$, we have to update the original matrix $A= QAQ^T$ and the Gram matrix $G = QGQ^T$ before next channel. We can do this since A is assumed to be a symmetric square matrix.
+
+\begin{algorithm}[H]
+\caption{pMMF}\label{pmmf}
+\begin{algorithmic}[1]
+\State \textbf{Input}: weighted adjacency matrix $A$, number of stages $P$, number of clusters $M$, compression ratio $\mu$, k-point rotation $k$
+
+\medskip
+\State \textbf{Set} the current active columns $A_0 = A$
+\State \textbf{Set} the current column indices $orig\_idx{1} = 1:G.N$
+\\ \quad\quad // $orig\_idx\{p+1\}$ keeps track of the columns indices at stage $p$ 
+
+\State \textbf{Set} the current permutation $idx{1} = 1:G.N$
+\\ \quad\quad // $idx\{p+1\}$ records the permutation applied to active columns at stage $p$ 
+
+\medskip
+\For{each stage $p = 1:P$}
+
+\State \textbf{Cluster} the active columns into $M$ clusters;
+\State \textbf{Set} $perm$ = permutation that will permute $A_{p-1}$ into correct cluster order
+\State \textbf{Permute}  $A = A(perm, perm)$
+\State \textbf{Update} $orig\_idx\{p+1\} = orig\_idx\{p\}(perm)$ 
+\State \textbf{Update} $idx\{p+1\} = perm$
+
+\medskip
+\For{each cluster $m = 1:M$}
+\State \textbf{Set} $Qs\{m\}$ = FindRotsInCluster(cluster, $\mu$, $k$, cInds)
+\EndFor
+
+\medskip
+\State \textbf{Merge} $Qs$ together to get the rotation $Q\{p\}$ for stage $p$
+
+\State \textbf{Update} $A = Q\{p\}AQ\{p\}^T$
+
+\State \textbf{Set} $perm =$ permutation that puts active columns together
+ 
+\State \textbf{Permute} $A = Q\{p\}AQ\{p\}^T$
+\State \textbf{Update} $orig\_idx\{p+1\} = orig\_idx\{p+1\}(perm)$
+\State \textbf{Update} $idx\{p+1\} = idx\{p+1\}(perm)$
+
+\EndFor
+
+\State \textbf{Output:} core $A$
+
+\end{algorithmic}
+\end{algorithm}
+
 
 
 
 
 \subsection{Wavelet Transform - June 5-7}
 
-Given a symmetric matrix $A \in \R^{n\times n}$, a $L$ level pMMF factorization will result in 
+First, we describe how the dictionary is built from pMMF. Given a symmetric matrix $A \in \R^{n\times n}$, a $L$ level pMMF factorization will result in 
 
-$$H = P_{L+1} (\overline{Q}_L P_L) \cdots (\overline{Q}_2 P_2) (\overline{Q}_1 P_1) A (P_1^{T} \overline{Q}_1^{T}) (P_2^{T} \overline{Q}_2^T) \cdots (P_{L} \overline{Q}_L^{T}) P_{L+1}^T$$
-Denote $Q_L = \overline{Q}_L P_L$ and we get
+$$H = P_{L+1} (\overline{Q}_L P_L) \cdots (\overline{Q}_2 P_2) (\overline{Q}_1 P_1) A (P_1^{T} \overline{Q}_1^{T}) (P_2^{T} \overline{Q}_2^T) \cdots (P_{L} \overline{Q}_L^{T}) P_{L+1}^T,$$
+where each $P_l$ is a permutation matrix and each $\overline{Q}_l$ is an orthogonal rotation matrix at level $l$.
+Denote $Q_l = \overline{Q}_l P_l$ and we get
 
 $$H = P_{L+1} Q_L \cdots Q_2 Q_1 A Q_1^T Q_2^T \cdots Q_L^T P_{L+1}^T$$
 Notice that $(P_{L+1} Q_L \cdots Q_2 Q_1)^T$ forms the dictionary for level $L$. The first dim$(V_L)$ columns are scaling functions and the rest of its columns are wavelets. The dictionary has the form of:
@@ -208,7 +314,7 @@ V_L & \vline & W_L & \vline & W_{L-1} & \vline & \cdots & \vline & W_1  \\
 & \vline & & \vline & & \vline & & \vline \\
 & \vline & & \vline & & \vline & & \vline \\
 \end{bmatrix}\]
-where $V_L$ denotes the scaling functions at level $L$ and each $W_i$ denotes the wavelet functions at level $i$.
+where $V_L$ denotes the scaling functions at level $L$ and each $W_l$ denotes the wavelet functions at level $l$.
 
 \smallskip
 The scaling and  wavelet functions have the following properties:
@@ -222,7 +328,7 @@ The scaling and  wavelet functions have the following properties:
 \smallskip
 In our code, $P_n$ is split into two separate permutations -- $C_n$, which occurs when the rows and columns are clustered, and $A_n$, which occurs when we group the remaining active columns together. However, for a given $\overline{A}_n$, the grouping of active columns and the clustering take place in successive iterations of a loop. So, for each $\overline{Q}_n$, we must undo the permutations $C_{n+1}$ and $A_n$. The only exception is $n = 1$ -- in this case, we only undo $C_1$ since the active columns have not yet been grouped together. So, our dictionary ($W$) is $$W = A_n\overline{Q}_nC_nA_{n-1}\cdots\overline{Q}_2C_2A_1\overline{Q}_1C_1$$
 
-\subsubsection{Example 1: $16 \times 16$ Community Graph}
+\subsubsection{Wavelet Transform Example 1: $16 \times 16$ Community Graph}
 
 \begin{figure}[h]
 \centering
@@ -246,7 +352,7 @@ Scaling Function \qquad\qquad\qquad\qquad Wavelet - Scale 1 \qquad\qquad\qquad W
 \end{figure}
 
 
-\subsubsection{Example 2: $500\times 500$ Sensor Network}
+\subsubsection{Wavelet Transform Example 2: $500\times 500$ Sensor Network}
 
 \begin{figure}[h]
 \centering
@@ -271,35 +377,55 @@ Scaling Function \qquad\qquad\qquad Wavelet Scale 1 \qquad\qquad\qquad Wavelet S
 \caption{\label{fig:sensor net} Dictionary Atoms in both vertex and frequency domain.}
 \end{figure}
 
-\subsection{Multiresolution of function spaces}
+\subsection{Check scaling spaces }
+We are interested in how scaling spaces are related to each other. We know that $V_i$ are nested. If we interpolate scaling function is $V_{l-1}$, will we get scaling function in $V_l$?
 
-\section{pMMF-Graph Reduction}
+\subsection{Plot core}
 
-\subsection{MMF on diffusion operator - June 8-12}
-Given graph $G$, let $G.U$ be eigenvectors of its graph Laplacian and $G.e$ be corresponding eigenvectors. Let $A = G.U*f(G.e)*G.U^T$, where $f(\lambda) = e^{-\tau\lambda}$. One level of MMF on matrix $A$ results in
+Solve for $x$ in $V_L(1:4,:)x = h_1$. Then plot $V_Lx$ on original graph. (Do least square if not full rank)
+
+\subsection{Other stuff}
+\begin{enumerate}
+\item Check if the Laplacian eigenvectors form a subspace of the old eigenvectors. 
+\item Plot interpolation coefficients. $Ax= B$.
+\end{enumerate}
+
+\section{pMMF-Graph Multiresolution}
+
+The goal is to rewire the downsampled graph based on the information provided by pMMF. 
+
+\textbf{pMMF Levers:}
+\begin{itemize}
+\item Clustering methods: spectral clustering, hierarchical clustering
+\item $k$-point rotations
+\item vertex selection for rotations
+\end{itemize}
+
+\textbf{Graph Levers:}
+\begin{itemize}
+\item starting matrix - $W, \La,$ or heat diffusion operator
+\end{itemize}
+
+
+\subsection{MMF on Diffusion Operator - June 8-12}
+Given graph $G$, let $G.U$ be eigenvectors of its graph Laplacian and $G.e$ be corresponding eigenvalues. Let $A = G.U*f(G.e)*G.U^T$, where $f(\lambda) = e^{-\tau\lambda}$. One level of MMF on matrix $A$ results in
 
 $$H = P_2Q_1AQ_1^TP_2^T$$
 
-Assume $H$ is a diffusion operator on some reduced graph. 
-
-Tried to (not sure if it's even a valid method):
+Assume $H$ is a diffusion operator on some reduced graph. We tried to
 
 \begin{enumerate}
 \item Diagonalize $H = VDV^T$
-\item Construct a graph Laplacian $L = Vf^{-1}(D)V^T$
+\item Construct a graph Laplacian $\La = Vf^{-1}(D)V^T$
 \end{enumerate}
 
-Failed: $L$ is not a Laplacian on downsampled vertices.
+However, $\La$ is not a graph Laplacian on downsampled vertices (row sums not equal to 0). 
 
-\smallskip
-Random thoughts:
-\begin{enumerate}
-\item Are there any methods to construct a graph Laplacian from $H$? 
-\item Find $L$ s.t. minimizes $|f(L) - H|$ ?
-\end{enumerate}
+Are there other methods to find a Laplacian $\La$ that minimizes $|f(\La) - H|$?
 
+Segarra et al. \cite{networktopology} suggest to infer the network topology based on spectral templates. Essentially, it is a convex optimization problem, see section \ref{segarraSection} for more details.
 
-\subsection{MMF on weighted adjacency matrix $W$ - June 12}
+\subsection{MMF on Weighted Adjacency Matrix $W$ - June 12}
 Some general observations:
 \begin{enumerate}
 \item The core $H$ has non-zero diagonals.
@@ -312,7 +438,7 @@ Some general observations:
 \end{enumerate}
 
 \subsubsection{Experiments on path graphs}
-MMF works well for path graphs in general. The core has zero diagonals and the new graph is connected (if \#clusters = 1). The lowest eigenvector of the reduced Laplacian and of the original Laplacian are both constants.
+MMF works well for path graphs in general. The core has zero diagonals (surprisingly) and the new graph is connected (if \# clusters = 1). The reduced graph captures the path structure.
 
 \begin{figure}[H]
 \centering
@@ -323,12 +449,12 @@ MMF works well for path graphs in general. The core has zero diagonals and the n
 
 \includegraphics[width = 8cm]{path_graph/rewire_path_graph}
 
-\caption{a.original graph b.downsampled graph(red vertices are kept) c. reduced graph}
+\caption{a. original graph b. downsampled graph (red vertices are kept) c.  reduced graph}
 \end{figure}
 
 
 \subsubsection{Experiments on ring graphs}
-For ring graphs, the core has zero diagonals, but the new graph is not necessarily connected. The new graph captures the ring structure. The lowest eigenvector of the reduced Laplacian and of the original Laplacian are both constants.
+For ring graphs, the core has zero diagonals, but the new graph is not necessarily connected. The new graph captures the ring structure.
 \begin{figure}[H]
 \centering
 
@@ -336,16 +462,38 @@ For ring graphs, the core has zero diagonals, but the new graph is not necessari
 \includegraphics[width = 6cm]{ring_graph/ring_graph_downsample}
 \includegraphics[width = 6cm]{ring_graph/ring_graph_reduced}
 
-\caption{a.original graph b.downsampled graph(red vertices are kept) c. reduced graph}
+\caption{a. original graph b. downsampled graph (red vertices are kept) c. reduced graph}
+\end{figure}
+
+\subsubsection{Experiments on community graphs}
+For community graphs or more complex graphs, the pMMF has a severe problem. The diagonals of reduced matrices are not zero. In other words, we can construct graph from the core directly. In this section, we force the diagonals of the reduced matrices to be 0 at each stage and create the reduced graph from it.
+
+The reduced graph preserves the community structure. Disjoint communities are still disjoint in new graphs. The sparsity is also maintained. 
+
+\begin{figure}[H]
+\centering
+\caption{a. original graph b. downsampled graph (red vertices are kept) c. reduced graph}
+\end{figure}
+
+\subsubsection{Experiments on sensor networks}
+Observations are similar to those of community graphs.
+
+\begin{figure}[H]
+\centering
+\caption{a. original graph b. downsampled graph (red vertices are kept) c. reduced graph}
 \end{figure}
 
 
-The downsampled vertices greatly influence how the reduced graph is rewired. It seems like a disconnection occurs if most of the vertices between the two are eliminated.
 
+
+\textbf{Note:}
+The downsampled vertices greatly influence how the reduced graph is rewired. It seems like a disconnection occurs if most of the vertices between the two are eliminated.
 
 With a evenly downsampled graph (every other vertex is kept), can we get better results?  Maybe experiment with different clustering method to get a evenly downsampled graph?
 
 Note: If we perform MMF on the Laplacian matrix, the reduced matrix we get is not a valid graph Laplacian.
+
+
 
 \subsection{$A = L$ vs. $A = I - L$}
 \begin{itemize}
@@ -363,6 +511,98 @@ Note: If we perform MMF on the Laplacian matrix, the reduced matrix we get is no
 \item The two are very comparable, but it seems like the downsampling using $A = I - L$ captures the sparsity/density of the original graph a bit better.
 \end{itemize}
 
+\section{Force Zero Diagonals}
+
+The structure of the weighted adjacency matrix can be lost through downsampling -- we are often left with a core that has non-zero diagonal entries. We can maintain a zero diagonal, however, by being selective when we rotate columns within a certain cluster. If columns $i$ and $j$ only rotate with one another, and if $[A_{n-1}]_{i,i} = 0$, then $$[A_n]_{i,i} = [Q_nA_{n-1}Q_n^T]_{i,i} = 0$$ if vertices $i$ and $j$ are disconnected in the graph represented by the weighted adjacency matrix $A_{n-1}$:
+\begin{align*}
+[A_n]_{i,i} &= [Q_nA_{n-1}Q_n^T]_{i,i} \\
+&= [Q_n]_{i,:}[A_{n-1}Q_n^T]_{:,i} \\
+&= [Q_n]_{i,:}<[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [A_{n-1}]_{s,:}[Q_n^T]_{:,i}> \\
+&= [Q_n]_{i,1}[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [Q_n]_{i,s}[A_{n-1}]_{s,:}[Q_n^T]_{:,i} 
+\end{align*}
+Since column $i$ only rotates with column $j$, the $i^{th}$ row of $Q_n$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ columns. So, the above equation simplifies to
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}[A_{n-1}]_{i,:}[Q_n^T]_{:,i} + [Q_n]_{i,j}[A_{n-1}]_{j,:}[Q_n^T]_{:,i}
+\end{align*}
+Likewise, the $i^{th}$ column of $Q_n^T$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ rows. We now have
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}) \\
+&= [Q_n]_{i,i}(0 + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + 0)
+\end{align*} 
+We have $[A_{n-1}]_{i,j} = [A_{n-1}]_{j,i}$ since $A$ is symmetric and $[Q_n]_{i,j} = [Q_n^T]_{j,i}$, so we are left with $$[A_n]_{i,i} = 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j}$$
+Since both entries of $Q_n$ are nonzero, $[A_n]_{i,i} = $ if and only if $[A_{n-1}]_{i,j} = 0$. \\
+\\
+The case is complicated further when, say, column $i$ rotates with both column $j$ and column $k$. Then, $Q_n$ has nonzero entries in the $i^{th}$, $j^{th}$, and $k^{th}$ columns, so we would end up with
+\begin{align*}
+[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i} + [A_{n-1}]_{i,k}[Q_n^T]_{k,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}  \\
+&+ [A_{n-1}]_{j,k}[Q_n^T]_{k,i}) + [Q_n]_{i,k}([A_{n-1}]_{k,i}[Q_n^T]_{i,i} + [A_{n-1}]_{k,j}[Q_n^T]_{j,i} + [A_{n-1}]_{k,k}[Q_n^T]_{k,i}) \\
+&= 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j} + 2[A_{n-1}]_{i,k}[Q_n]_{i,i}[Q_n]_{i,k} + 2[A_{n-1}]_{j,k}[Q_n]_{i,j}[Q_n]_{i,k}
+\end{align*}
+We see that $[A_{n-1}]_{j,k}$ now contributes as well. So, not only must the pairs $(i,j)$ and $(i,k)$ be disconnected, vertices $j$ and $k$ must also be disconnected even if they are not one of the pairs of columns that is rotated.\\
+If we want to guarantee $[A_n]_{i,i} = 0$ for all $i$ in the cluster, the vertices in the cluster must all be mutually disconnected. However, this seems counterintuitive, since we normally would want to rotate similar vertices with one another. This method does the exact opposite, and as a result, downsampling results in edges between communities that were previously disconnected.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_1}
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_2}
+
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_3}
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_4}
+
+\includegraphics[width = 7 cm]{disconnected_pMMF/discon_5}
+
+\caption{pMMF performed on a 500 vertex sensor network with 4 stages, 4 clusters, 2-point rotations, and compression ratio 0.5. Rotations are performed only on disconnected vertices.}
+\end{figure}
+
+\section{$k$-point Rotations, $k>2$}
+As $k$ increases, the graphs become denser. When $k = n-1$, it is equivalent to double procrustes problem.
+\subsection{Double Procrustes Problem}
+
+Double Procrustes problem considers finding an orthogonal matrix $Q$, which minimizes $$||Q^TAQ-B||$$ for symmetric $A$ and $B$. 
+
+Since both $A$ and $B$ are symmetric, we can diagonalize these two matrices
+$$ A = V_1D_1V_2^T\text{ and } B = V_2D_2V_2^T.$$
+Then in this case, $Q = V_1 V_2^T$. (Detailed solution can be found in "Procrustes Problems", Oxford University Press). 
+
+In the graph setting, we want to find an orthogonal $Q$, which minimizes $||Q^TLQ - L'||$, where $L$ is the original graph Laplacian and $L'$ is the reduced graph Laplacian. If we do multile levels, we could generate scaling and wavelet functions similar to pMMF. That is, the first $dim(V_L)$ rows of $Q$ are scaling functions and the rest of its rows are wavelets.
+
+Some general observations;
+\begin{enumerate}
+\item This method connects Kron reduction and pMMF.
+\item Q is not sparse.
+\item The energy of scaling functions and wavelets are not localized.
+\item Kron reduction produced dense sub-graphs.
+\end{enumerate}
+
+\section{Spectral Clustering}
+Now we construct a downsampled graph at each stage, taking the core to be a weighted adjacency matrix. Note that the core has non-zero diagonals. we simply set the diagonals to zero. \\
+Parameters:
+\begin{itemize}
+\item $G$ = gsp\_david\_sensor\_network
+\item 500 vertices
+\item $A = G.W$
+\item 4 stages
+\item 2 clusters
+\item 2-point rotations
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 7cm]{multiresolution/multires1}
+\includegraphics[width = 7cm]{multiresolution/multires2}
+
+\includegraphics[width = 7cm]{multiresolution/multires3}
+\includegraphics[width = 7cm]{multiresolution/multires4}
+
+\includegraphics[width = 7cm]{multiresolution/multires5}
+
+\caption{The top left figure is the original graph, gsp\_david\_sensor\_network with 500 vertices, and each subsequent figure is the result of one stage of downsampling.}
+\end{figure}
+
+
+
+
+\section{Interpreting Results}
 \subsection{Edge Weights}
 Compared the proportion of edges with high weight ($> 0.9$) in a gsp\_david\_sensor\_network graph with 500 nodes and the downsampled graph using A = W, A = L, and A = I - L. \\
 $22.15\%$  of the edges on the original graph had high weight, and
@@ -374,7 +614,7 @@ $22.15\%$  of the edges on the original graph had high weight, and
 When we look at the $n$ highest-weighted edges (however many have weight > 0.9) in the original graph G and the $n \cdot \frac{G downsampled.N}{G.N}$ highest-weighted edges in the downsampled graph, we see that the areas of the downsampled graph which contain high-weighted edges most closely mirror the analogous areas on the original graph when $A = I - L$. $A = W$ does okay, but when $A = L$, the downsampled graph seems to ignore some high-weight areas from the original graph. \\
 These judgments are all just visual, so next steps would be to find a way to quantify high-weight edge retention numerically.
 
-\section{Plot Reduced Laplacian Eigenvectors}
+\subsection{Plot Reduced Laplacian Eigenvectors}
 
 Parameters:
 \begin{itemize}
@@ -398,7 +638,7 @@ Parameters:
 
 \end{figure}
 
-\section{Interpolation}
+\subsection{Interpolation}
 
 The adjacency matrix of the reduced graph is obtained from $H-Diag(H)$. Then we interpolate the eigenvectors of the reduced graph Laplacian and compare them to the eigenvectors of the original graph Laplacian.
 
@@ -418,7 +658,7 @@ The adjacency matrix of the reduced graph is obtained from $H-Diag(H)$. Then we 
 
 \end{figure}
 
-\subsection{Interpolation Coefficient Matrix}
+\subsubsection{Interpolation Coefficient Matrix}
 Take A as the the weighted adjacency matrix, we notice that the reduced matrix has non-zero diagonals. In this section, we zero out the diagonals at each stage. Also, we set the compression ratio $\mu = 0.2$. Smaller compression ratio seems to give better interpolation results.
 
 First example is on the path graph. Parameters:
@@ -484,200 +724,11 @@ The second example is on david\_sensor\_network graph. Parameters:
 \end{figure}
 
 \newpage
-\section{pMMF Multiresolution}
-\subsection{pMMF Detailed Pseudocode}
-
-\begin{algorithm}[H]
-\caption{ComputeRotationMatrix}\label{givens}
-\begin{algorithmic}[1]
-\State \textbf{Input:} current cluster $A_1$, row/column indices $i$ and $j$, current Gram Matrix $G$
-
-\State \textbf{set} $b = G(i, j)$
-\State \textbf{set} $c = (G(j, j) - G(i, i))/2$;
-
-\If {$g\neq 0$}
-\State \textbf{set} $\beta = c / b$
-\State \textbf{set} $tan(\alpha) = \frac{1}{|\beta| + \sqrt{\beta * \beta + 1}}$
-
-\State \textbf{set}  $cos(\alpha) = \frac{1}{\sqrt{(t * t + 1)}}$;
-
-\State \textbf{set}   $Q = \begin{bmatrix}
-\cos(\alpha) & -\sin(\alpha) \\
-\sin(\alpha)  & \cos(\alpha)
-\end{bmatrix}$
-\Else
-
-$Q = I$
-\EndIf
-\State \textbf{Output:} $Q$
-\end{algorithmic}
-\end{algorithm}
-
-Algorithm \ref{givens} finds an orthogonal rotation matrix $Q = \begin{bmatrix}
-\cos(\alpha) & -\sin(\alpha) \\
-\sin(\alpha)  & \cos(\alpha)
-\end{bmatrix}$
- such that the second term of equation 20 is minimized when $k = 2$. That is to find an angle $\theta = 2\alpha$ such that $$\sin(\theta + \omega +\pi/2) = 0,, \text{where } \omega = \arctan(\frac{G(i,i) - G(j,j)}{2G(i,j)})$$
- 
- Let $b = G(i, j)$ and $c = \frac{G(j, j) - G(i, i)}{2}$;
- 
- Equivalently,
- $$\cos(\theta + \omega) = 0$$
- $$\theta = \pi/2-\omega = \pi/2 - \arctan(\frac{c}{b})$$
- 
-$$\tan(\alpha) = \tan(\theta/2) = \tan(\pi/4 - \frac{1}{2}\arctan(\frac{c}{b})) \text{     (if }\frac{c}{b}>0)$$
-$$\tan(\alpha) = \frac{1}{\frac{c}{b} + \sqrt{(\frac{c}{b})^2 +1}}$$
-$$\cos(\alpha) = \frac{1}{\sqrt{\tan(\alpha)^2 + 1}}$$
-$$\sin(\alpha) = \tan(\alpha)*\sin(\alpha)$$
-
-When $k>2$, the rotation matrix $Q$ is the eigenvectors of the $G_{I,I}$, where $I$ contains $k$ selected column indices. (why?)
-
-Similarly, only the second term of equation 20 is minimized. That is,
-$$\text{min } [QG_{I,I}Q^T]_{k,k}$$
-Equivalently, $$\text{min } x^T[G_{I,I}]x \text{ such that } ||x||_2 = 1.$$
-By Courant-Fischer theorem, $$\text{min } x^T[G_{I,I}]x = \lambda_1$$
-
-Let $x$ be the smallest eigenvector $v_1$ of $G_{I,I}$. Then,
-$$\text{min } x^T[G_{I,I}]x = \text{min } v_1^T[G_{I,I}]v_1 = v_1\lambda_1v_1 = \lambda_1$$
 
 
-To find $k$ rows/columns involved in each rotation, pMMF uses the randomized greedy method. First, randomly select a column $i$, and then compute the inner product of this column with all other columns. The selected column set will include $k-1$ columns that have the largest inner products with column $i$. Algorithm 2 in ``Parallel MMF: a Multiresolution Approach to Matrix Computation'' gives a good description of this process.
+\section{Other Methods}
 
-Note that after we get the rotation matrix $Q$, we have to update the original matrix $A= QAQ^T$ and the Gram matrix $G = QGQ^T$ before next channel.
-
-\begin{algorithm}[H]
-\caption{pMMF}\label{pmmf}
-\begin{algorithmic}[1]
-\State \textbf{Input}: weighted adjacency matrix $A$, number of stages $P$, number of clusters $M$, compression ratio $\mu$, k-point rotation $k$
-
-\medskip
-\State \textbf{Set} the current active columns $A_0 = A$
-\State \textbf{Set} the current column indices $orig\_idx{1} = 1:G.N$
-\\ \quad\quad // $orig\_idx\{p+1\}$ keeps track of the columns indices at stage $p$ 
-
-\State \textbf{Set} the current permutation $idx{1} = 1:G.N$
-\\ \quad\quad // $idx\{p+1\}$ records the permutation applied to active columns at stage $p$ 
-
-\medskip
-\For{each stage $p = 1:P$}
-
-\State \textbf{Cluster} the active columns into $M$ clusters;
-\State \textbf{Set} $perm$ = permutation that will permute $A_{p-1}$ into correct cluster order
-\State \textbf{Permute}  $A = A(perm, perm)$
-\State \textbf{Update} $orig\_idx\{p+1\} = orig\_idx\{p\}(perm)$ 
-\State \textbf{Update} $idx\{p+1\} = perm$
-
-\medskip
-\For{each cluster $m = 1:M$}
-\State \textbf{Set} $Qs\{m\}$ = FindRotsInCluster(cluster, $\mu$, $k$, cInds)
-\EndFor
-
-\medskip
-\State \textbf{Merge} $Qs$ together to get the rotation $Q\{p\}$ for stage $p$
-
-\State \textbf{Update} $A = Q\{p\}AQ\{p\}^T$
-
-\State \textbf{Set} $perm =$ permutation that puts active columns together
- 
-\State \textbf{Permute} $A = Q\{p\}AQ\{p\}^T$
-\State \textbf{Update} $orig\_idx\{p+1\} = orig\_idx\{p+1\}(perm)$
-\State \textbf{Update} $idx\{p+1\} = idx\{p+1\}(perm)$
-
-\EndFor
-
-\State \textbf{Output:} core $A$
-
-\end{algorithmic}
-\end{algorithm}
-
-\subsection{Examples}
-
-Now we construct a downsampled graph at each stage, taking the core to be a weighted adjacency matrix. Note that the core has non-zero diagonals. we simply set the diagonals to zero. \\
-Parameters:
-\begin{itemize}
-\item $G$ = gsp\_david\_sensor\_network
-\item 500 vertices
-\item $A = G.W$
-\item 4 stages
-\item 2 clusters
-\item 2-point rotations
-\end{itemize}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 7cm]{multiresolution/multires1}
-\includegraphics[width = 7cm]{multiresolution/multires2}
-
-\includegraphics[width = 7cm]{multiresolution/multires3}
-\includegraphics[width = 7cm]{multiresolution/multires4}
-
-\includegraphics[width = 7cm]{multiresolution/multires5}
-
-\caption{The top left figure is the original graph, gsp\_david\_sensor\_network with 500 vertices, and each subsequent figure is the result of one stage of downsampling.}
-\end{figure}
-
-\section{Double Procrustes Problem}
-
-Double Procrustes problem considers finding an orthogonal matrix $Q$, which minimizes $$||Q^TAQ-B||$$ for symmetric $A$ and $B$. 
-
-Since both $A$ and $B$ are symmetric, we can diagonalize these two matrices
-$$ A = V_1D_1V_2^T\text{ and } B = V_2D_2V_2^T.$$
-Then in this case, $Q = V_1 V_2^T$. (Detailed solution can be found in "Procrustes Problems", Oxford University Press). 
-
-In the graph setting, we want to find an orthogonal $Q$, which minimizes $||Q^TLQ - L'||$, where $L$ is the original graph Laplacian and $L'$ is the reduced graph Laplacian. If we do multile levels, we could generate scaling and wavelet functions similar to pMMF. That is, the first $dim(V_L)$ rows of $Q$ are scaling functions and the rest of its rows are wavelets.
-
-Some general observations;
-\begin{enumerate}
-\item This method connects Kron reduction and pMMF.
-\item Q is not sparse.
-\item The energy of scaling functions and wavelets are not localized.
-\item Kron reduction produced dense sub-graphs.
-\end{enumerate}
-
-\section{Downsampling G.W}
-
-The structure of the weighted adjacency matrix can be lost through downsampling -- we are often left with a core that has non-zero diagonal entries. We can maintain a zero diagonal, however, by being selective when we rotate columns within a certain cluster. If columns $i$ and $j$ only rotate with one another, and if $[A_{n-1}]_{i,i} = 0$, then $$[A_n]_{i,i} = [Q_nA_{n-1}Q_n^T]_{i,i} = 0$$ if vertices $i$ and $j$ are disconnected in the graph represented by the weighted adjacency matrix $A_{n-1}$:
-\begin{align*}
-[A_n]_{i,i} &= [Q_nA_{n-1}Q_n^T]_{i,i} \\
-&= [Q_n]_{i,:}[A_{n-1}Q_n^T]_{:,i} \\
-&= [Q_n]_{i,:}<[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [A_{n-1}]_{s,:}[Q_n^T]_{:,i}> \\
-&= [Q_n]_{i,1}[A_{n-1}]_{1,:}[Q_n^T]_{:,i} + \cdots + [Q_n]_{i,s}[A_{n-1}]_{s,:}[Q_n^T]_{:,i} 
-\end{align*}
-Since column $i$ only rotates with column $j$, the $i^{th}$ row of $Q_n$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ columns. So, the above equation simplifies to
-\begin{align*}
-[A_n]_{i,i} &= [Q_n]_{i,i}[A_{n-1}]_{i,:}[Q_n^T]_{:,i} + [Q_n]_{i,j}[A_{n-1}]_{j,:}[Q_n^T]_{:,i}
-\end{align*}
-Likewise, the $i^{th}$ column of $Q_n^T$ will only have nonzero entries in the $i^{th}$ and $j^{th}$ rows. We now have
-\begin{align*}
-[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}) \\
-&= [Q_n]_{i,i}(0 + [A_{n-1}]_{i,j}[Q_n^T]_{j,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + 0)
-\end{align*} 
-We have $[A_{n-1}]_{i,j} = [A_{n-1}]_{j,i}$ since $A$ is symmetric and $[Q_n]_{i,j} = [Q_n^T]_{j,i}$, so we are left with $$[A_n]_{i,i} = 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j}$$
-Since both entries of $Q_n$ are nonzero, $[A_n]_{i,i} = $ if and only if $[A_{n-1}]_{i,j} = 0$. \\
-\\
-The case is complicated further when, say, column $i$ rotates with both column $j$ and column $k$. Then, $Q_n$ has nonzero entries in the $i^{th}$, $j^{th}$, and $k^{th}$ columns, so we would end up with
-\begin{align*}
-[A_n]_{i,i} &= [Q_n]_{i,i}([A_{n-1}]_{i,i}[Q_n^T]_{i,i} + [A_{n-1}]_{i,j}[Q_n^T]_{j,i} + [A_{n-1}]_{i,k}[Q_n^T]_{k,i}) + [Q_n]_{i,j}([A_{n-1}]_{j,i}[Q_n^T]_{i,i} + [A_{n-1}]_{j,j}[Q_n^T]_{j,i}  \\
-&+ [A_{n-1}]_{j,k}[Q_n^T]_{k,i}) + [Q_n]_{i,k}([A_{n-1}]_{k,i}[Q_n^T]_{i,i} + [A_{n-1}]_{k,j}[Q_n^T]_{j,i} + [A_{n-1}]_{k,k}[Q_n^T]_{k,i}) \\
-&= 2[A_{n-1}]_{i,j}[Q_n]_{i,i}[Q_n]_{i,j} + 2[A_{n-1}]_{i,k}[Q_n]_{i,i}[Q_n]_{i,k} + 2[A_{n-1}]_{j,k}[Q_n]_{i,j}[Q_n]_{i,k}
-\end{align*}
-We see that $[A_{n-1}]_{j,k}$ now contributes as well. So, not only must the pairs $(i,j)$ and $(i,k)$ be disconnected, vertices $j$ and $k$ must also be disconnected even if they are not one of the pairs of columns that is rotated.\\
-If we want to guarantee $[A_n]_{i,i} = 0$ for all $i$ in the cluster, the vertices in the cluster must all be mutually disconnected. However, this seems counterintuitive, since we normally would want to rotate similar vertices with one another. This method does the exact opposite, and as a result, downsampling results in edges between communities that were previously disconnected.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width = 7 cm]{disconnected_pMMF/discon_1}
-\includegraphics[width = 7 cm]{disconnected_pMMF/discon_2}
-
-\includegraphics[width = 7 cm]{disconnected_pMMF/discon_3}
-\includegraphics[width = 7 cm]{disconnected_pMMF/discon_4}
-
-\includegraphics[width = 7 cm]{disconnected_pMMF/discon_5}
-
-\caption{pMMF performed on a 500 vertex sensor network with 4 stages, 4 clusters, 2-point rotations, and compression ratio 0.5. Rotations are performed only on disconnected vertices.}
-\end{figure}
-
-\section{Ron et al.}
+\subsection{Ron et al.}
 
 Ron et al. assign a fraction $P_{ij}$ to a vertex's neighbors when it is eliminated. We combine this idea with pMMF. We use the downsampled graph generated by pMMF. If a givens rotation is performed between vertices $i$ and $j$ and $j$ is eliminated, the $P_{j, i} = 1$. The final reduced graph is $$W_{j,j'} = \sum P{mj} P{nj'} W_{mn}.$$
 
@@ -691,7 +742,7 @@ Reduced graphs:
 \includegraphics[width = 12 cm]{Ron_et_al/2nd_reduced}
 \end{figure}
 
-\section{Network Topology Identification from Spectral Templates}
+\subsection{Network Topology Identification from Spectral Templates}
 
 Let the graph shift operator $S \in \R^{N\times N}$ be the adjacency matrix of a graph. Given the spectral templates $V = {v_1, \cdots, v_N}$, Segarra et al try to find
 $$\text{min}_{S, \lambda} ||S||_0 $$
