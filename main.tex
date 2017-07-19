@@ -17,8 +17,8 @@
 \usepackage{float}
 \usepackage{amsmath}
 \usepackage{amsthm,amssymb}
-%\usepackage{graphicx}
-\usepackage[draft]{graphicx}
+\usepackage{graphicx}
+%\usepackage[draft]{graphicx}
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage[colorlinks=true, allcolors=blue]{hyperref}
 
@@ -29,6 +29,8 @@
 \newcommand{\La}{\mathcal{L}}
 \newcommand{\Gram}{\text{Gram}}
 \newcommand{\Frob}{\text{Frob}}
+\newcommand{\min}{\text{minimize}}
+\newcommand{\st}{\text{subject to }}
 
 \newcommand{\lrarrow}{\searrow}
 \newcommand{\rarrow}{\longrightarrow}
@@ -179,7 +181,7 @@ Each orthogonal transform eliminates a small set of vertices by introducing zero
 
 \begin{figure}[H]
 \centering
-\includegraphics[width = 10cm]{pmmf/nestedspaces}
+\includegraphics[width = 6cm]{pmmf/nestedspaces}
 \end{figure}
 
 Each $V_i$ is a subspace spanned by scaling functions at level $i$, which provide global insight into structure of signals, while each $W_i$ is a subspace spanned by wavelet functions at level $i$, which have higher frequency than scaling functions and capture specialized local information of signals.
@@ -575,7 +577,9 @@ Some general observations;
 \end{enumerate}
 
 \section{Spectral Clustering}
-Now we construct a downsampled graph at each stage, taking the core to be a weighted adjacency matrix. Note that the core has non-zero diagonals. we simply set the diagonals to zero. \\
+Another lever is the clustering method used in pMMF. In C++ library, they randomly cluster the columns until some criterion is satisfied. We would like to try another clustering method such that the graph is better cover with downsampled vertices.
+
+Spectral clustering is a combination of polarity of eigenvectors and k-means. The other levers are kept the same. Then, we construct a downsampled graph at each stage, taking the core to be a weighted adjacency matrix. Note that the core has non-zero diagonals. we simply set the diagonals to zero here. \\
 Parameters:
 \begin{itemize}
 \item $G$ = gsp\_david\_sensor\_network
@@ -744,6 +748,15 @@ Reduced graphs:
 
 \subsection{Network Topology Identification from Spectral Templates}
 
+\textbf{Background:}
+
+Consider problem P0:
+
+$$\min ||X||_0 \st AX = b$$ 
+
+
+
+
 Let the graph shift operator $S \in \R^{N\times N}$ be the adjacency matrix of a graph. Given the spectral templates $V = {v_1, \cdots, v_N}$, Segarra et al try to find
 $$\text{min}_{S, \lambda} ||S||_0 $$
 $$\text{subject to } S = V\lambda V^T $$
@@ -773,8 +786,6 @@ We use a few different multiresolution methods on this graph: pMMF, pMMF combine
 
 \subsection{gsp\_multiresolutions}
 \end{comment}
-
-
 
 
 
