@@ -5,8 +5,9 @@
 \usepackage[utf8x]{inputenc}
 \usepackage[T1]{fontenc}
 
-%% Sets page size and margins
-\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+%% Sets page size, margins, indentations
+\usepackage[a4paper,top=3cm,bottom=3cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+\setlength\parindent{0pt}
 
 %% Useful packages
 \usepackage{listings}
@@ -16,13 +17,21 @@
 \usepackage{float}
 \usepackage{amsmath}
 \usepackage{amsthm,amssymb}
-\usepackage{graphicx}
-%\usepackage[draft]{graphicx}
+%\usepackage{graphicx}
+\usepackage[draft]{graphicx}
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage[colorlinks=true, allcolors=blue]{hyperref}
 
 %% Operators
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\V}{\mathcal{V}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\La}{\mathcal{L}}
+\newcommand{\Gram}{\text{Gram}}
+\newcommand{\Frob}{\text{Frob}}
+
+\newcommand{\lrarrow}{\searrow}
+\newcommand{\rarrow}{\longrightarrow}
 
 \lstset{
 language=Matlab,                % choose the language of the code
@@ -56,38 +65,54 @@ escapeinside={\%*}{*)}          % if you want to add a comment within your code
 \begin{enumerate}
 \item Finding the optimal Givens rotation: 
 \begin{enumerate}
-\item Proposition 4 proposes to find the roots of an optimality condition derived in the supplement. However, the pMMF library appears to avoid the $A$ matrix altogether. We calculated that if we ignore $A$ then the optimal alpha should be $\arctan(b/c)/2$.
+\item Proposition 4 proposes to find the roots of an optimality condition derived in the supplement. However, the pMMF library appears to avoid the $A$ matrix altogether. We calculated that if we ignore $A$ then the optimal alpha should be $\arctan \frac{b}{2c}$.
 \item If this is what is being done, how do we interpret the choice in terms of optimization?
 \item Why is $A$ in Proposition 4 supposed to be a diagonal matrix  
 \end{enumerate}
+\item Finding the optimal rotations when $k>2$
+
+In Section 2.2 of second paper, ``actual rotation angle is determined by diagonalizing the Gram matrix.'' How?
+
+In their code, they diagonalize the the Gram matrix and take the transpose of the eigenvectors as the rotation matrix. The code appears to avoid the first error term in equation 19 and solve the optimization problem described in section \ref{rotations}  (Courant-Fischer-Weyl min-max problem).
 
 \item In equation (10) on the multiresolution, should the second to last term be $dim(V_l),i$ instead of $dim(V_{l-1}),i$?
 \item How is the clustering done?
+Function called compressionMap in \verb|MMFmatrix.hpp|.
 
-Function called compression map in MMFmatrix.hpp
 \item Algorithm 2
 \begin{enumerate}
 
-\item If $A$ is a tall, skinny matrix, how can it be reset by multiplying on left and right by a square matrix of same dimensions
+\item If $A$ is a tall, skinny matrix, how can it be reset by multiplying on left and right by a square matrix of same dimensions?
 
-\item Why is it the rows of A that are used to determine which one to eliminate? (or this is because A is always symmetric). In this case, A is referring to square matrix, not the tall skinny matrix defined in the input.
+
+\item Why is it the rows of $A$ that are used to determine which one to eliminate? (or this is because $A$ is always symmetric). In this case, $A$ is referring to square matrix, not the tall skinny matrix defined in the input.
+
+$$n_1 = \Gram_{i_1, i_1} - A_{i_1, i_1} * A_{i_1, i_1}$$
+$$n_2 = \Gram_{i_2, i_2} - A_{i_2, i_2} * A_{i_2, i_2}$$
+
+If $n_1<n_2$, eliminate $i_1$. Otherwise, eliminate $i_2$.
 \end{enumerate}
 
-\item Finding the optimal rotations when K>2
 
-In Section 2.2 of second paper, ``actual rotation angle is determined by diagonalizing the Gram matrix.'' How? Maybe check the code.
+
 \end{enumerate}
 
 \subsection{other}
 \begin{enumerate}
 \item How to quantify the relationship between reduced and original Laplacian eigenvectors?
+\item How to construct a graph from a given heat diffusion? (convex optimization, see \cite{Segarra})
+\item Why the core obtained from pMMF has nonzero diagonals? Where do they come from?
+
+The rotation matrix $Q$ affects all rows and columns invovled in the rotation, contributing errors to the diagonal entries. 
+
+
 \end{enumerate}
 \newpage
 \section{Givens Rotations, Sparse QR - May 26}
 
 \subsection{A $2\times 2$ Review}
-\begin{itemize}
-\item A 2-by-2 orthogonal matrix Q is a \textbf{rotation} if it has the form 
+
+A 2-by-2 orthogonal matrix Q is a \textbf{rotation} if it has the form 
 \[
 Q = \begin{bmatrix}
     \cos\theta & \sin\theta \\
@@ -95,7 +120,7 @@ Q = \begin{bmatrix}
 \end{bmatrix}\]
 For $x \in \R^2$, $Q^Tx$ rotates $x$ counterclockwise through $\theta$.
 
-\item A 2-by-2 orthogonal reflection matrix Q is a \textbf{reflection} if it has the form 
+A 2-by-2 orthogonal matrix Q is a \textbf{reflection} if it has the form 
 \[
 Q = \begin{bmatrix}
     \cos\theta & \sin\theta \\
@@ -107,13 +132,11 @@ $$\text{span}\left \{\begin{bmatrix}
     \cos\theta/2 \\
     \sin\theta/2
 \end{bmatrix}\right \}$$
-\end{itemize}
+
 
 \subsection{General Givens Rotations}
-\begin{itemize}
-\item Givens rotations are used to selectively zero elements of a matrix
-\item Rank 2 corrections to the identity
-\item For $c= \cos\theta$ and $s = \sin\theta$,
+
+Givens rotations are used to introducing zero elements into a matrix selectively. In general, they are rank 2 corrections to the identity. Denote $c= \cos\theta$ and $s = \sin\theta$, a givens rotation has the following form
 \[G(i,k, \theta) = \begin{bmatrix}
 1 &          &    &   &      &   \\
   &  \ddots  &    &   &      &   \\
@@ -123,13 +146,14 @@ $$\text{span}\left \{\begin{bmatrix}
   &          &    &   &      & 1 
 \end{bmatrix}\] 
 
-$G$ rotates $x\in \R^n$ through $\theta$ in $(i,k)$ coordinate plane.
-\item The rotation $G(i,k,\theta)^{T} \cdot A$ only affects the $i^{th}$ and $k^{th}$ rows/columns of matrix $A$.
-\end{itemize}
+Clearly, $G$ is orthogonal. $G$ rotates $x\in \R^n$ through $\theta$ in $(i,k)$ coordinate plane. Also, givens rotations preserve sparsity of a matrix, since $G^{T} \cdot A \cdot G$ only affects the $i^{th}$ and $k^{th}$ rows/columns of matrix $A$.
+
+In practice, there are efficient algorithms to compute c and s given a vectors in $\R^2$, See \cite{MatrixComputations} for technical details.
+
 
 \subsection{Sparse QR using Givens Rotation}
 
-Given a matrix $A$, the QR factorization is unique. In $Q$, some of the columns have to span a particular subspace and the remaining columns have to form an orthogonal basis for the complement to this subspace. Thus, the orthogonal matrix cannot be sparse. Sparse QR method represents $Q$ as a product of Givens rotations, which are extremely sparse/structured matrices.(\url{https://mathoverflow.net/questions/94198/sparsity-of-qr-decomposition})
+Given a matrix $A$, the QR factorization is unique. In $Q$, some of the columns have to span a particular subspace and the remaining columns have to form an orthogonal basis for the complement to this subspace. Thus, the orthogonal matrix cannot be sparse. Sparse QR method represents $Q$ as a product of Givens rotations, which are extremely sparse/structured matrices.(\url{https://mathoverflow.net/questions/94198/sparsity-of-qr-decomposition})\cite{SparseQR}
 
 \subsection{Sparse QR Challenge}
 
@@ -140,6 +164,34 @@ Given a matrix $A$, the QR factorization is unique. In $Q$, some of the columns 
 \end{itemize}
 
 \section{pMMF}
+
+pMMF is a multiresolution matrix factorization method, which tries to find a sequence of sparse and orthogonal rotation matrices $Q_i$ such that
+$$H = Q_L \cdots Q_2 Q_1 A Q_1^T Q_2^T \cdots Q_L^T .$$
+
+Graphically, the structure ca be represented as
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 15cm]{pmmf/pmmf}
+\end{figure}
+
+Each orthogonal transform eliminates a small set of vertices by introducing zeros in corresponding rows/columns. Notice that after the first stage, $Q_1AQ_1^T$ captures the finest scale structure in $A$. It splits $\R^n$ into two subspaces: the subspace spanned by scaling functions (kept vertices) and the subspace spanned by wavelets (eliminated vertices). Then, another stage of transform splits off another subspace spanned by level two wavelets and so on. This is the nested multiresolution of function spaces and can be represented graphically as
+
+\begin{figure}[H]
+\centering
+\includegraphics[width = 10cm]{pmmf/nestedspaces}
+\end{figure}
+
+Each $V_i$ is a subspace spanned by scaling functions at level $i$, which provide global insight into structure of signals, while each $W_i$ is a subspace spanned by wavelet functions at level $i$, which have higher frequency than scaling functions and capture specialized local information of signals.
+
+In general, pMMF is only an approximation algorithm. Essentialy, it tries to solve this optimization problem
+\[\underset{Q_1\cdots Q_l \in \mathcal{Q}}{\text{minimize }} ||A - Q_1^T\cdots Q_L^THQ_L\cdots Q_1||^2_{\Frob}\]
+
+\subsection{Algorithm}
+
+
+
+
 \subsection{Wavelet Transform - June 5-7}
 
 Given a symmetric matrix $A \in \R^{n\times n}$, a $L$ level pMMF factorization will result in 
@@ -219,7 +271,7 @@ Scaling Function \qquad\qquad\qquad Wavelet Scale 1 \qquad\qquad\qquad Wavelet S
 \caption{\label{fig:sensor net} Dictionary Atoms in both vertex and frequency domain.}
 \end{figure}
 
-
+\subsection{Multiresolution of function spaces}
 
 \section{pMMF-Graph Reduction}
 
